@@ -356,30 +356,26 @@ function viewFill(keep) {
   html += '<button class="tg ' + (F.onlyMine ? 'on' : '') + '" id="tg-mine">只看我填的</button>';
   html += '</div>';
 
-  if (!shown.length) {
-    html += '<div class="card"><div class="empty">没有符合条件的终端<br><span style="font-size:12px">换个关键词，或清空筛选</span></div></div>';
-  } else {
-    html += '<div class="list">';
-    shown.forEach(t => {
-      const s = SUBS[t.id];
-      const meta = [t.p, t.c, t.t, t.s].filter(Boolean).join(' · ');
-      let rt = s
-        ? '<span class="badge done">已填</span>' + (isNum(s.h) || isNum(s.i) ? '<div class="num">初治 ' + fmt(s.h) + ' / 经治 ' + fmt(s.i) + '</div>' : '')
-        : '<span class="badge">未填</span>';
-      html += '<div class="row ' + (s ? 'done' : '') + '" data-go="#/form/' + t.id + '">' +
-        '<div class="main"><div class="nm">' + esc(t.n) + '</div><div class="mt">' + esc(meta) + '</div></div>' +
-        '<div class="rt">' + rt + '</div></div>';
-    });
-    html += '</div>';
-    if (list.length > shown.length) {
-      html += '<div style="margin-top:10px"><button class="more" id="more">还有 ' + (list.length - shown.length) + ' 家，点击显示更多</button></div>';
-    }
-  }
+  html += '<div id="listwrap">' + listBlock() + '</div>';
   html += '<div style="height:8px"></div></div>';
   byId('view').innerHTML = html;
   if (!keep) window.scrollTo(0, 0);
 
-  byId('q').addEventListener('input', e => { F.q = e.target.value; refreshListOnly(); });
+  const qi = byId('q');
+  let composing = false;
+  qi.addEventListener('compositionstart', () => { composing = true; });
+  qi.addEventListener('compositionend', () => {
+    composing = false;
+    F.q = qi.value;
+    listLimit = 60;
+    scheduleList();
+  });
+  qi.addEventListener('input', e => {
+    F.q = qi.value;
+    if (composing || e.isComposing) return;   // 拼音还没选字，先不动列表
+    listLimit = 60;
+    scheduleList();
+  });
   Array.prototype.forEach.call(document.querySelectorAll('[data-r]'), b => {
     b.addEventListener('click', () => { F.region = b.getAttribute('data-r'); F.province = ''; viewFill(); });
   });
@@ -389,18 +385,45 @@ function viewFill(keep) {
     if (!CFG.reporter) { toast('请先在“设置”里填你的名字'); go('#/settings'); return; }
     F.onlyMine = !F.onlyMine; viewFill();
   });
+}
+
+function listBlock() {
+  const list = filteredTerminals();
+  const shown = list.slice(0, listLimit);
+  if (!shown.length) {
+    return '<div class="card"><div class="empty">没有符合条件的终端<br><span style="font-size:12px">换个关键词，或清空筛选</span></div></div>';
+  }
+  let h = '<div class="list">';
+  shown.forEach(t => {
+    const s = SUBS[t.id];
+    const meta = [t.p, t.c, t.t, t.s].filter(Boolean).join(' · ');
+    const rt = s
+      ? '<span class="badge done">已填</span>' + (isNum(s.h) || isNum(s.i) ? '<div class="num">初治 ' + fmt(s.h) + ' / 经治 ' + fmt(s.i) + '</div>' : '')
+      : '<span class="badge">未填</span>';
+    h += '<div class="row ' + (s ? 'done' : '') + '" data-go="#/form/' + t.id + '">' +
+      '<div class="main"><div class="nm">' + esc(t.n) + '</div><div class="mt">' + esc(meta) + '</div></div>' +
+      '<div class="rt">' + rt + '</div></div>';
+  });
+  h += '</div>';
+  if (list.length > shown.length) {
+    h += '<div style="margin-top:10px"><button class="more" id="more">还有 ' + (list.length - shown.length) + ' 家，点击显示更多</button></div>';
+  }
+  return h;
+}
+
+// 只重绘列表，不碰输入框 —— 否则中文输入法打拼音时会被打断
+function paintList() {
+  const w = byId('listwrap');
+  if (!w) return;
+  w.innerHTML = listBlock();
   const more = byId('more');
-  if (more) more.addEventListener('click', () => { listLimit += 80; viewFill(); });
+  if (more) more.addEventListener('click', () => { listLimit += 80; paintList(); });
 }
 
 let _listT = null;
-function refreshListOnly() {
+function scheduleList() {
   clearTimeout(_listT);
-  _listT = setTimeout(() => {
-    viewFill(true);
-    const q = byId('q');
-    if (q) { q.focus(); const v = q.value; try { q.setSelectionRange(v.length, v.length); } catch (e) { } }
-  }, 260);
+  _listT = setTimeout(paintList, 120);
 }
 
 /* ---------------- 7. 填报页 ---------------- */

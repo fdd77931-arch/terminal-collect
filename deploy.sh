@@ -123,6 +123,8 @@ if [ "$DRY" = "1" ]; then
   note "[dry-run] 会执行 git push -u origin $BRANCH"
 else
   git push -u origin "$BRANCH" 2>&1 | tail -3
+  # 同步 gh-pages，避免 Pages 指向旧分支
+  git push -f origin "$BRANCH:gh-pages" >/dev/null 2>&1 && note "已同步 gh-pages"
 fi
 
 # ---------- 5. Pages ----------

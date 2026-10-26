@@ -65,7 +65,15 @@ else
   warn "没装 gh（不影响，下面会给手动命令）"
 fi
 
-if [ "$HAS_GH" = "0" ]; then
+HAS_ORIGIN=0
+if git remote get-url origin >/dev/null 2>&1; then HAS_ORIGIN=1; fi
+
+if [ "$HAS_GH" = "0" ] && [ "$HAS_ORIGIN" = "1" ]; then
+  note "已连接远程：$(git remote get-url origin)"
+  note "跳过 gh 检查，直接推送更新"
+fi
+
+if [ "$HAS_GH" = "0" ] && [ "$HAS_ORIGIN" = "0" ]; then
   cat <<EOF
 
 ────────────────────────────────────────────────────────
@@ -91,7 +99,9 @@ fi
 
 # ---------- 3. 远程仓库 ----------
 say "3/5 创建 / 连接远程仓库"
-if gh repo view "$OWNER/$REPO" >/dev/null 2>&1; then
+if [ "$HAS_ORIGIN" = "1" ]; then
+  note "已有远程 origin，跳过创建"
+elif gh repo view "$OWNER/$REPO" >/dev/null 2>&1; then
   note "仓库已存在：$OWNER/$REPO"
   if git remote get-url origin >/dev/null 2>&1; then
     git remote set-url origin "https://github.com/$OWNER/$REPO.git"
@@ -117,7 +127,10 @@ fi
 
 # ---------- 5. Pages ----------
 say "5/5 打开 GitHub Pages"
-if [ "$DRY" = "1" ]; then
+if [ "$HAS_GH" = "0" ]; then
+  note "没有 gh，跳过 API 调用；仓库早先已开通过 Pages 的话，推送后自动更新"
+  PAGES_NOTE=1
+elif [ "$DRY" = "1" ]; then
   note "[dry-run] 会调用 GitHub API 开启 Pages"
 else
   if gh api -X POST "repos/$OWNER/$REPO/pages" \

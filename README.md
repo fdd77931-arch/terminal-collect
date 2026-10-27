@@ -179,6 +179,9 @@ brew install gh && gh auth login
 | `index.html` | 页面结构与样式（无外部依赖，不连 CDN） |
 | `app.js` | 全部逻辑：填报、校验、存储、口令报告、导出 |
 | `terminals.js` | 321 家终端主数据 |
+| `config.js` | 云端地址和 key（随网页公开，只能写入不能读） |
 | `supabase.sql` | 建表 + 权限 + 口令函数 |
+
+> 换 Supabase 项目或换 key：只改 `config.js`，然后 `bash deploy.sh`。所有人打开网页会自动连上，不需要再发长链接。
 
 本地试用：双击 `index.html`；想看有数据的报告，地址后加 `?demo=1`（设置里可一键清除演示数据）。

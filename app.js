@@ -188,12 +188,12 @@ function sbBase() { return (CFG.sbUrl || '').replace(/\/+$/, ''); }
 async function sbReq(path, opts) {
   opts = opts || {};
   if (!sbBase() || !CFG.sbKey) throw new Error('未配置 Supabase 地址或 Key');
+  const hdrs = { apikey: CFG.sbKey, 'Content-Type': 'application/json' };
+  // 老版 anon key 是 JWT（eyJ 开头），需要同时放 Authorization；
+  // 新版 sb_publishable_ 开头的 key 只放 apikey 就行，带错 Bearer 反而会被拒
+  if (String(CFG.sbKey).indexOf('eyJ') === 0) hdrs.Authorization = 'Bearer ' + CFG.sbKey;
   const res = await fetch(sbBase() + '/rest/v1/' + path, Object.assign({}, opts, {
-    headers: Object.assign({
-      apikey: CFG.sbKey,
-      Authorization: 'Bearer ' + CFG.sbKey,
-      'Content-Type': 'application/json'
-    }, opts.headers || {})
+    headers: Object.assign(hdrs, opts.headers || {})
   }));
   if (!res.ok) {
     let txt = '';

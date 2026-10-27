@@ -218,6 +218,14 @@ async function sbPush(rec) {
     })
   });
 }
+function sbHint(e) {
+  const m = String((e && e.message) || e || '');
+  if (m.indexOf('401') >= 0 || m.indexOf('403') >= 0) return 'anon key 不对，去 Supabase 的 API 页面重新复制一次';
+  if (m.indexOf('404') >= 0) return '地址不对，或者 SQL 还没跑（找不到表/函数）';
+  if (m.indexOf('Failed to fetch') >= 0 || m.indexOf('NetworkError') >= 0) return '连不上，检查地址有没有写错、网络是否正常';
+  if (m.indexOf('bad passcode') >= 0) return '口令不对';
+  return m;
+}
 async function sbPing() {
   await sbReq('rpc/ping', { method: 'POST', body: '{}' });
   return true;
@@ -947,7 +955,7 @@ async function viewReport() {
       LAST_INFO = await sbPull(pass);
     } catch (e) {
       sessionStorage.removeItem('tf.pass');
-      renderGate('口令不对，或数据库没连通：' + e.message);
+      renderGate(sbHint(e));
       return;
     }
   }
@@ -1217,7 +1225,7 @@ function viewSettings() {
     try {
       await sbPing();
       toast('连接成功');
-    } catch (e) { toast('连接失败：' + e.message, 'err'); }
+    } catch (e) { toast('连接失败：' + sbHint(e), 'err'); }
   });
   const bp = byId('btn-pull');
   if (bp) bp.addEventListener('click', () => { go('#/report'); });
@@ -1366,6 +1374,19 @@ function genDemo() {
     return;
   }
   const qp = new URLSearchParams(location.search);
+  const qsb = qp.get('sb'), qkey = qp.get('key');
+  if (qsb && qkey) {
+    CFG.sbUrl = qsb.replace(/\/+$/, '');
+    CFG.sbKey = qkey;
+    CFG.storage = 'supabase';
+    saveCfg();
+    qp.delete('sb'); qp.delete('key');
+    const rest = qp.toString();
+    try {
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    } catch (e) { }
+    setTimeout(() => toast('已写入云端配置，去「报告」输口令试试'), 400);
+  }
   if (qp.get('demo') === '1' && doneCount() === 0) genDemo();
   if (!location.hash) location.hash = '#/fill';
   route();

@@ -23,7 +23,7 @@ const DEF_TESTS = [
   '耐药位点检测'
 ];
 const DEFAULT_CFG = {
-  period: '9月',
+  period: '',            // 空 = 跟随当前月份；也可写 2026-10
   reporter: '',
   storage: 'local',       // local | supabase
   sbUrl: '',
@@ -51,6 +51,25 @@ const median = a => {
 };
 const uniq = a => Array.from(new Set(a));
 const sum = (a, f) => a.reduce((s, x) => s + (isNum(f(x)) ? f(x) : 0), 0);
+
+/* ---------- 周期 ---------- */
+function curPeriod() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function normPeriod(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  let m = s.match(/^(\d{4})[-/年]?(\d{1,2})月?$/);
+  if (m) return m[1] + '-' + String(+m[2]).padStart(2, '0');
+  m = s.match(/^(\d{1,2})月$/);
+  if (m) return new Date().getFullYear() + '-' + String(+m[1]).padStart(2, '0');
+  return s;
+}
+function pLabel(p) {
+  const m = String(p || '').match(/^(\d{4})-(\d{2})$/);
+  return m ? (m[1] + '年' + (+m[2]) + '月') : (p || '未标周期');
+}
 
 let _toastT = null;
 function toast(msg, type) {
@@ -146,6 +165,8 @@ function pushLog(rec) {
 }
 
 let CFG = loadCfg();
+let PERIOD = '';          // 本次填报周期，boot 时确定
+let RP = '';              // 报告当前查看的周期
 let SUBS = loadSubs();
 let FO = null;
 let REMOTE = null;        // 云端拉下来的报告数据（按终端取最新）
@@ -157,7 +178,9 @@ let listLimit = 60;
 function loadCfg() {
   let c = {};
   try { c = JSON.parse(localStorage.getItem(K_CFG) || '{}') || {}; } catch (e) { c = {}; }
+  if (c && c.period === '9月') c.period = '2026-09';   // 旧版本迁移
   const out = Object.assign({}, DEFAULT_CFG, c);
+  out.period = normPeriod(out.period);
   if (!Array.isArray(out.types) || !out.types.length) out.types = DEF_TYPES.slice();
   if (!Array.isArray(out.tests) || !out.tests.length) out.tests = DEF_TESTS.slice();
   return out;
@@ -338,7 +361,7 @@ function viewFill(keep) {
   const cloud = CFG.storage === 'supabase';
   html += '<div class="hero">' +
     '<div class="k">TERMINAL DATA</div>' +
-    '<h1>' + esc(CFG.period) + '终端数据填报</h1>' +
+    '<h1>' + esc(pLabel(PERIOD)) + '终端数据填报</h1>' +
     '<div class="sub">共 ' + total + ' 家终端 · 找到你负责的，填完点提交</div>' +
     (cloud ? '' : '<div class="prog"><i style="width:' + (rate * 100).toFixed(1) + '%"></i></div>') +
     '<div class="prog-txt"><span>' + (cloud ? '我已提交 ' + done + ' 家' : '已提交 ' + done + ' / ' + total) + '</span><span>' + (cloud ? '提交后由管理员汇总' : pct(rate)) + '</span></div>' +
@@ -495,10 +518,10 @@ function viewForm(id) {
     '<input class="input" id="f-pot" type="number" inputmode="numeric" min="0" step="100" value="' + esc(FO.pot) + '">' +
     '<div class="hint">按你们自己的口径填，系统用它算“目标 / 潜力”。上期值已带出，可直接改。</div></div></div>';
 
-  html += '<div class="sec-title">二、' + esc(CFG.period) + '目标</div><div class="card">' +
+  html += '<div class="sec-title">二、目标（' + esc(pLabel(PERIOD)) + '）</div><div class="card">' +
     '<div class="grid2">' +
-    '<div class="field"><label>' + esc(CFG.period) + '初治目标</label><input class="input" id="f-h" type="number" inputmode="numeric" min="0" value="' + esc(FO.h) + '"></div>' +
-    '<div class="field"><label>' + esc(CFG.period) + '经治改方目标</label><input class="input" id="f-i" type="number" inputmode="numeric" min="0" value="' + esc(FO.i) + '"></div>' +
+    '<div class="field"><label>初治目标</label><input class="input" id="f-h" type="number" inputmode="numeric" min="0" value="' + esc(FO.h) + '"></div>' +
+    '<div class="field"><label>经治改方目标</label><input class="input" id="f-i" type="number" inputmode="numeric" min="0" value="' + esc(FO.i) + '"></div>' +
     '</div>' +
     '<div class="grid2">' +
     '<div class="field"><label>初治目标准确率</label><input class="input" id="f-ha" type="number" inputmode="decimal" min="0" max="300" value="' + esc(FO.ha) + '"><div class="hint">百分数，如 92</div></div>' +
@@ -645,8 +668,8 @@ function validateForm() {
   const errs = [];
   const mark = id => { const e = byId(id); if (e) e.classList.add('err'); return e; };
   if (!isNum(FO.pot) || FO.pot <= 0) errs.push({ id: 'f-pot', msg: '请填写终端潜力（大于 0）' });
-  if (!isNum(FO.h) || FO.h < 0) errs.push({ id: 'f-h', msg: '请填写' + CFG.period + '初治目标' });
-  if (!isNum(FO.i) || FO.i < 0) errs.push({ id: 'f-i', msg: '请填写' + CFG.period + '经治改方目标' });
+  if (!isNum(FO.h) || FO.h < 0) errs.push({ id: 'f-h', msg: '请填写初治目标' });
+  if (!isNum(FO.i) || FO.i < 0) errs.push({ id: 'f-i', msg: '请填写经治改方目标' });
   if (!FO.reporter.trim()) errs.push({ id: 'f-reporter', msg: '请填写填报人姓名' });
 
   if (!FO.noTreated) {
@@ -682,7 +705,7 @@ function buildRec() {
     pot: FO.pot, h: FO.h, i: FO.i, ha: isNum(FO.ha) ? FO.ha : null, ia: isNum(FO.ia) ? FO.ia : null,
     noTreated: !!FO.noTreated && !Object.keys(types).length,
     types: types, tests: tests,
-    reporter: FO.reporter.trim(), note: FO.note.trim(),
+    reporter: FO.reporter.trim(), note: FO.note.trim(), period: PERIOD,
     ts: new Date().toISOString(), ver: (FO.ver || 0) + 1, synced: false
   };
 }
@@ -824,7 +847,7 @@ function computeReport(dataMap) {
 
 function conclusions(r) {
   const out = [];
-  const P = CFG.period;
+  const P = RP || PERIOD;
 
   if (r.done === 0) return out;
 
@@ -913,7 +936,7 @@ function conclusions(r) {
 
 function renderGate(msg, noCfg) {
   let html = '<div class="shell">';
-  html += '<div class="hero"><div class="k">ADMIN</div><h1>' + esc(CFG.period) + '填报分析</h1>' +
+  html += '<div class="hero"><div class="k">ADMIN</div><h1>' + esc(pLabel(RP || PERIOD)) + '填报分析</h1>' +
     '<div class="sub">报告仅管理员可见 · 销售提交不需要口令</div></div>';
   html += '<div class="card">';
   if (noCfg) {
@@ -959,12 +982,15 @@ async function viewReport() {
       return;
     }
   }
-  const r = computeReport(REMOTE);
+  const srcAll = REMOTE || SUBS;
+  const plist = periodListOf(srcAll);
+  if (!RP || plist.indexOf(RP) < 0) RP = plist[plist.length - 1] || PERIOD;
+  const r = computeReport(byPeriod(srcAll, RP));
   const cs = conclusions(r);
 
   let html = '';
   html += '<div class="shell wide">';
-  html += '<div class="hero"><div class="k">AUTO REPORT</div><h1>' + esc(CFG.period) + '填报分析</h1>' +
+  html += '<div class="hero"><div class="k">AUTO REPORT</div><h1>' + esc(pLabel(RP || PERIOD)) + '填报分析</h1>' +
     '<div class="sub">' + (CFG.storage === 'supabase'
       ? '数据源：云端 · 共 ' + (LAST_INFO ? LAST_INFO.rows : 0) + ' 次提交'
       : '数据源：本机浏览器') + ' · 自动生成</div>' +
@@ -985,8 +1011,8 @@ async function viewReport() {
 
   html += '<div class="kpis">' +
     '<div class="kpi"><div class="l">回收率</div><div class="v">' + (r.rate * 100).toFixed(1) + '<small>%</small></div><div class="d">' + r.done + ' / ' + r.total + ' 家</div></div>' +
-    '<div class="kpi"><div class="l">' + esc(CFG.period) + '初治目标</div><div class="v">' + fmt(r.sumH) + '</div><div class="d">潜力 ' + fmt(r.sumPot) + '</div></div>' +
-    '<div class="kpi"><div class="l">' + esc(CFG.period) + '经治改方</div><div class="v">' + fmt(r.sumI) + '</div><div class="d">目标合计 ' + fmt(r.sumH + r.sumI) + '</div></div>' +
+    '<div class="kpi"><div class="l">初治目标</div><div class="v">' + fmt(r.sumH) + '</div><div class="d">潜力 ' + fmt(r.sumPot) + '</div></div>' +
+    '<div class="kpi"><div class="l">经治改方</div><div class="v">' + fmt(r.sumI) + '</div><div class="d">目标合计 ' + fmt(r.sumH + r.sumI) + '</div></div>' +
     '<div class="kpi"><div class="l">目标 / 潜力</div><div class="v">' + pct(r.sumPot ? (r.sumH + r.sumI) / r.sumPot : 0) + '</div><div class="d">中位数 ' + pct(r.med) + '</div></div>' +
     '</div>';
 
@@ -995,6 +1021,12 @@ async function viewReport() {
     '<div><div class="sv">' + (isNum(r.avgIa) ? r.avgIa.toFixed(1) + '%' : '—') + '</div><div class="sl">平均经治准确率（' + r.nIa + ' 家）</div></div>' +
     '<div><div class="sv" style="' + (r.over100.length ? 'color:var(--warn)' : '') + '">' + r.over100.length + '</div><div class="sl">准确率 &gt; 100%</div></div>' +
     '</div></div>';
+
+  if (plist.length > 1) {
+    html += '<div class="chips" style="margin:2px 0 12px">' + plist.map(p =>
+      '<button class="chip ' + (p === RP ? 'on' : '') + '" data-rp="' + esc(p) + '">' + esc(pLabel(p)) + '</button>'
+    ).join('') + '</div>';
+  }
 
   if (CFG.storage === 'local' && Object.keys(SUBS).some(id => SUBS[id] && !SUBS[id].demo)) {
     html += '<div class="concl warn"><span class="dot"></span><div><div class="tt">当前是「本机模式」</div>' +
@@ -1093,10 +1125,13 @@ async function viewReport() {
     toast('已退出');
     go('#/fill');
   });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rp]'), b => {
+    b.addEventListener('click', () => { RP = b.getAttribute('data-rp'); viewReport(); });
+  });
   byId('btn-csv').addEventListener('click', exportCSV);
   byId('btn-miss').addEventListener('click', exportMissing);
   byId('btn-copy').addEventListener('click', () => {
-    const txt = CFG.period + '填报分析（回收 ' + r.done + '/' + r.total + '，' + pct(r.rate) + '）\n\n' +
+    const txt = pLabel(RP || PERIOD) + '填报分析（回收 ' + r.done + '/' + r.total + '，' + pct(r.rate) + '）\n\n' +
       cs.map((c, i) => (i + 1) + '. ' + c.t + '\n' + c.x).join('\n\n');
     navigator.clipboard.writeText(txt).then(() => toast('结论已复制'), () => toast('复制失败，请手动选择', 'err'));
   });
@@ -1110,9 +1145,27 @@ function csvCell(v) {
 function toCSV(rows) {
   return '\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
 }
-function reportSource() { return REMOTE || SUBS; }
+function periodListOf(src) {
+  const set = new Set([PERIOD]);
+  Object.keys(src).forEach(id => { const v = src[id]; if (v) set.add(v.period || PERIOD); });
+  return Array.from(set).filter(Boolean).sort();
+}
+function byPeriod(src, p) {
+  const out = {};
+  Object.keys(src).forEach(id => {
+    const v = src[id];
+    if (v && (v.period || PERIOD) === p) out[id] = v;
+  });
+  return out;
+}
+function reportSource() {
+  const all = REMOTE || SUBS;
+  return RP ? byPeriod(all, RP) : all;
+}
 function historyData() {
-  if (CFG.storage === 'supabase' && REMOTE_RAW) return REMOTE_RAW.slice();
+  if (CFG.storage === 'supabase' && REMOTE_RAW) {
+    return REMOTE_RAW.filter(h => h && (h.period || PERIOD) === RP);
+  }
   const log = loadLog();
   if (log.length) return log;
   // 没有历史（比如导入/演示数据）时，用当前数据合成一条时间线
@@ -1142,14 +1195,14 @@ function exportCSV() {
       isNum(s.pot) && s.pot > 0 ? ((s.h || 0) + (s.i || 0)) / s.pot : '',
       s.ha, s.ia, types, tests, s.reporter, s.ts]);
   });
-  download('终端填报明细_' + CFG.period + '.csv', toCSV(rows));
+  download('终端填报明细_' + (RP || PERIOD) + '.csv', toCSV(rows));
   toast('已导出明细');
 }
 function exportMissing() {
   const src = reportSource();
   const rows = [['终端ID', '区域', '省份', '城市', '终端名称', '城市层级', '专科/综合', '上期潜力']];
   TERMINALS.forEach(t => { if (!src[t.id]) rows.push([t.id, t.r, t.p, t.c, t.n, t.t, t.s, t.pot]); });
-  download('未填终端名单_' + CFG.period + '.csv', toCSV(rows));
+  download('未填终端名单_' + (RP || PERIOD) + '.csv', toCSV(rows));
   toast('已导出未填名单（' + (rows.length - 1) + ' 家）');
 }
 
@@ -1160,7 +1213,7 @@ function viewSettings() {
   html += '<div class="shell">';
 
   html += '<div class="sec-title">基础</div><div class="card">' +
-    '<div class="field"><label>填报周期</label><input class="input" id="s-period" type="text" value="' + esc(CFG.period) + '" placeholder="如 9月"><div class="hint">会显示在表单标题里，换月只改这里。</div></div>' +
+    '<div class="field"><label>填报周期</label><input class="input" id="s-period" type="text" value="' + esc(CFG.period) + '" placeholder="2026-10（留空 = 跟随当前月份）"><div class="hint">写成 2026-10 或 2026年10月 都行。留空就按当月算，每月自动走。只影响你自己这台设备，发链接时可以用 ?p=2026-10 指定。</div></div>' +
     '<div class="field"><label>我的姓名</label><input class="input" id="s-reporter" type="text" value="' + esc(CFG.reporter) + '" placeholder="填一次，之后自动带出"><div class="hint">用于“只看我填的”和报告里的填报人。</div></div>' +
     '</div>';
 
@@ -1209,7 +1262,13 @@ function viewSettings() {
   html += '<div style="height:8px"></div></div>';
   byId('view').innerHTML = html;
 
-  byId('s-period').addEventListener('input', e => { CFG.period = e.target.value || '9月'; saveCfg(); });
+  byId('s-period').addEventListener('change', e => {
+    CFG.period = normPeriod(e.target.value);
+    saveCfg();
+    PERIOD = CFG.period || curPeriod();
+    toast('填报周期：' + pLabel(PERIOD));
+    route();
+  });
   byId('s-reporter').addEventListener('input', e => { CFG.reporter = e.target.value; saveCfg(); });
   Array.prototype.forEach.call(document.querySelectorAll('[data-st]'), b => {
     b.addEventListener('click', () => {
@@ -1387,6 +1446,8 @@ function genDemo() {
     } catch (e) { }
     setTimeout(() => toast('已写入云端配置，去「报告」输口令试试'), 400);
   }
+  PERIOD = normPeriod(qp.get('p')) || CFG.period || curPeriod();
+  RP = PERIOD;
   if (qp.get('demo') === '1' && doneCount() === 0) genDemo();
   if (!location.hash) location.hash = '#/fill';
   route();

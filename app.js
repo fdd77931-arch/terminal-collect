@@ -190,6 +190,19 @@ function loadCfg() {
   out.period = normPeriod(out.period);
   if (!Array.isArray(out.types) || !out.types.length) out.types = DEF_TYPES.slice();
   if (!Array.isArray(out.tests) || !out.tests.length) out.tests = DEF_TESTS.slice();
+
+  // 云端配置随网页下发：没配过的设备自动连上，不用再走 ?sb=&key= 那种长链接
+  const cloud = window.CLOUD || null;
+  if (cloud && cloud.url && cloud.key) {
+    const hadUrl = !!(c && c.sbUrl);
+    if (!out.sbUrl) out.sbUrl = cloud.url;
+    if (!out.sbKey) out.sbKey = cloud.key;
+    // 从没连过云端的老设备（本机模式且没地址）——自动切过来，否则别人填的数据看不到
+    if (!hadUrl && (!c || !c.storage || c.storage === 'local')) {
+      out.storage = 'supabase';
+      try { localStorage.setItem(K_CFG, JSON.stringify(out)); } catch (e) { }
+    }
+  }
   return out;
 }
 function saveCfg() {
@@ -323,6 +336,29 @@ function bars(items, maxOverride) {
 }
 function doneCount() { return Object.keys(SUBS).filter(id => T_BY_ID[id]).length; }
 
+function unsyncedIds() {
+  return Object.keys(SUBS).filter(id => {
+    const v = SUBS[id];
+    return T_BY_ID[id] && v && !v.synced && !v.demo;
+  });
+}
+async function syncPending() {
+  const ids = unsyncedIds();
+  if (!ids.length) return;
+  toast('正在补传 ' + ids.length + ' 条…');
+  let ok = 0, fail = 0;
+  for (let i = 0; i < ids.length; i++) {
+    try {
+      await sbPush(SUBS[ids[i]]);
+      SUBS[ids[i]].synced = true;
+      ok++;
+    } catch (e) { fail++; }
+  }
+  persistSubs();
+  toast(fail ? ('补传成功 ' + ok + ' 条，失败 ' + fail + ' 条') : ('已补传 ' + ok + ' 条'), fail ? 'err' : '');
+  viewFill();
+}
+
 /* ---------------- 6. 填报首页 ---------------- */
 function filteredTerminals() {
   const q = F.q.trim().toLowerCase();
@@ -374,6 +410,15 @@ function viewFill(keep) {
     '<div class="prog-txt"><span>' + (cloud ? '我已提交 ' + done + ' 家' : '已提交 ' + done + ' / ' + total) + '</span><span>' + (cloud ? '提交后由管理员汇总' : pct(rate)) + '</span></div>' +
     '</div>';
 
+  if (cloud) {
+    const pend = unsyncedIds().length;
+    if (pend) {
+      html += '<div class="card tight" style="background:#fdf4e3;border:1px solid #f3e0bd;margin-bottom:10px">' +
+        '<div style="font-size:13px;color:#8a5a12;line-height:1.6">有 <b>' + pend + '</b> 条提交还没传到云端，管理员那边看不到。' +
+        '<button class="btn ghost small" id="btn-sync" style="margin-left:6px;padding:5px 10px">立即补传</button></div></div>';
+    }
+  }
+
   html += '<div class="search"><span class="ico">⌕</span><input id="q" type="search" placeholder="搜索医院 / 城市 / 省份" value="' + esc(F.q) + '"></div>';
 
   html += '<div class="chips">';
@@ -399,6 +444,8 @@ function viewFill(keep) {
   byId('view').innerHTML = html;
   if (!keep) window.scrollTo(0, 0);
 
+  const bs = byId('btn-sync');
+  if (bs) bs.addEventListener('click', syncPending);
   const qi = byId('q');
   let composing = false;
   qi.addEventListener('compositionstart', () => { composing = true; });

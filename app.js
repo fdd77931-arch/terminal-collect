@@ -66,6 +66,12 @@ function normPeriod(v) {
   if (m) return new Date().getFullYear() + '-' + String(+m[1]).padStart(2, '0');
   return s;
 }
+function shareLink() {
+  const base = (location.origin && location.origin !== 'null')
+    ? location.origin + location.pathname
+    : 'https://fdd77931-arch.github.io/terminal-collect/';
+  return base + '?p=' + encodeURIComponent(PERIOD);
+}
 function pLabel(p) {
   const m = String(p || '').match(/^(\d{4})-(\d{2})$/);
   return m ? (m[1] + '年' + (+m[2]) + '月') : (p || '未标周期');
@@ -1213,7 +1219,13 @@ function viewSettings() {
   html += '<div class="shell">';
 
   html += '<div class="sec-title">基础</div><div class="card">' +
-    '<div class="field"><label>填报周期</label><input class="input" id="s-period" type="text" value="' + esc(CFG.period) + '" placeholder="2026-10（留空 = 跟随当前月份）"><div class="hint">写成 2026-10 或 2026年10月 都行。留空就按当月算，每月自动走。只影响你自己这台设备，发链接时可以用 ?p=2026-10 指定。</div></div>' +
+    '<div class="field"><label>填报周期</label><input class="input" id="s-period" type="text" value="' + esc(CFG.period) + '" placeholder="2026-10（留空 = 跟随当前月份）"><div class="hint">写成 2026-10 或 2026年10月 都行；留空就按当月算。</div></div>' +
+    '<div class="field"><label>本月分享链接</label>' +
+    '<input class="input" id="s-share" readonly value="' + esc(shareLink()) + '" style="font-size:12.5px;background:#f7f9fb">' +
+    '<div style="display:flex;gap:8px;margin-top:8px">' +
+    '<button class="btn primary small" id="btn-copy-link" style="flex:1">复制链接发群</button>' +
+    '<button class="btn ghost small" id="btn-open-link">预览</button></div>' +
+    '<div class="hint">改上面的周期，这条链接会跟着变。销售打开哪个链接，数据就归到哪个月——因为每个人的手机不共享设置，<b>链接才是月份开关</b>。</div></div>' +
     '<div class="field"><label>我的姓名</label><input class="input" id="s-reporter" type="text" value="' + esc(CFG.reporter) + '" placeholder="填一次，之后自动带出"><div class="hint">用于“只看我填的”和报告里的填报人。</div></div>' +
     '</div>';
 
@@ -1262,6 +1274,18 @@ function viewSettings() {
   html += '<div style="height:8px"></div></div>';
   byId('view').innerHTML = html;
 
+  byId('btn-copy-link').addEventListener('click', () => {
+    const v = byId('s-share').value;
+    navigator.clipboard.writeText(v).then(
+      () => toast('链接已复制，发群里就行'),
+      () => { byId('s-share').select(); toast('请手动复制（已全选）'); }
+    );
+  });
+  byId('btn-open-link').addEventListener('click', () => {
+    const v = byId('s-share').value;
+    if (v.indexOf('file:') === 0) { toast('本地文件模式没有在线链接'); return; }
+    window.open(v, '_blank');
+  });
   byId('s-period').addEventListener('change', e => {
     CFG.period = normPeriod(e.target.value);
     saveCfg();

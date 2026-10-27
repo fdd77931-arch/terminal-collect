@@ -1229,9 +1229,20 @@ function historyData() {
     return { id: id, name: v.name, reporter: v.reporter, ts: v.ts, h: v.h, i: v.i };
   });
 }
+function pad2(n) { return String(n).padStart(2, '0'); }
+// 存的是 UTC 的 ISO 串，显示时转成本机时区
 function tstr(ts) {
-  const v = String(ts || '');
-  return v.length >= 16 ? v.slice(5, 16).replace('T', ' ') : (v || '—');
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts).slice(5, 16).replace('T', ' ');
+  return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+function tfull(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
+    pad2(d.getHours()) + ':' + pad2(d.getMinutes());
 }
 function exportCSV() {
   const src = reportSource();
@@ -1247,7 +1258,7 @@ function exportCSV() {
     rows.push([t.id, t.r, t.p, t.c, t.n, t.t, t.s, s.pot, s.h, s.i,
       (s.h || 0) + (s.i || 0),
       isNum(s.pot) && s.pot > 0 ? ((s.h || 0) + (s.i || 0)) / s.pot : '',
-      s.ha, s.ia, types, tests, s.reporter, s.ts]);
+      s.ha, s.ia, types, tests, s.reporter, tfull(s.ts)]);
   });
   download('终端填报明细_' + (RP || PERIOD) + '.csv', toCSV(rows));
   toast('已导出明细');

@@ -1280,7 +1280,8 @@ function viewSettings() {
   html += '<div class="sec-title">基础</div><div class="card">' +
     '<div class="field"><label>填报周期</label><input class="input" id="s-period" type="text" value="' + esc(CFG.period) + '" placeholder="2026-10（留空 = 跟随当前月份）"><div class="hint">当前生效：<b>' + esc(pLabel(PERIOD)) + '</b>' +
       (PERIOD_SRC === 'url' ? '（来自链接参数 ?p=）' : PERIOD_SRC === 'cfg' ? '（来自本机设置）' : '（跟随当前月份）') +
-      '。写成 2026-10 或 2026年10月 都行；留空就按当月算。</div></div>' +
+      '。写成 2026-10 或 2026年10月 都行；留空就按当月算。</div>' +
+    '<div style="margin-top:8px"><button class="btn ghost small" id="btn-follow-month">跟随当前月份（清空）</button></div></div>' +
     '<div class="field"><label>本月分享链接</label>' +
     '<input class="input" id="s-share" readonly value="' + esc(shareLink()) + '" style="font-size:12.5px;background:#f7f9fb">' +
     '<div style="display:flex;gap:8px;margin-top:8px">' +
@@ -1335,6 +1336,14 @@ function viewSettings() {
   html += '<div style="height:8px"></div></div>';
   byId('view').innerHTML = html;
 
+  byId('btn-follow-month').addEventListener('click', () => {
+    CFG.period = '';
+    saveCfg();
+    PERIOD = curPeriod();
+    PERIOD_SRC = 'auto';
+    toast('已改为跟随当前月份：' + pLabel(PERIOD));
+    viewSettings();
+  });
   byId('btn-copy-link').addEventListener('click', () => {
     const v = byId('s-share').value;
     navigator.clipboard.writeText(v).then(

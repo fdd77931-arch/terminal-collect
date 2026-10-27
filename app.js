@@ -172,6 +172,7 @@ function pushLog(rec) {
 
 let CFG = loadCfg();
 let PERIOD = '';          // 本次填报周期，boot 时确定
+let PERIOD_SRC = '';      // url | cfg | auto
 let RP = '';              // 报告当前查看的周期
 let SUBS = loadSubs();
 let FO = null;
@@ -1219,7 +1220,9 @@ function viewSettings() {
   html += '<div class="shell">';
 
   html += '<div class="sec-title">基础</div><div class="card">' +
-    '<div class="field"><label>填报周期</label><input class="input" id="s-period" type="text" value="' + esc(CFG.period) + '" placeholder="2026-10（留空 = 跟随当前月份）"><div class="hint">写成 2026-10 或 2026年10月 都行；留空就按当月算。</div></div>' +
+    '<div class="field"><label>填报周期</label><input class="input" id="s-period" type="text" value="' + esc(CFG.period) + '" placeholder="2026-10（留空 = 跟随当前月份）"><div class="hint">当前生效：<b>' + esc(pLabel(PERIOD)) + '</b>' +
+      (PERIOD_SRC === 'url' ? '（来自链接参数 ?p=）' : PERIOD_SRC === 'cfg' ? '（来自本机设置）' : '（跟随当前月份）') +
+      '。写成 2026-10 或 2026年10月 都行；留空就按当月算。</div></div>' +
     '<div class="field"><label>本月分享链接</label>' +
     '<input class="input" id="s-share" readonly value="' + esc(shareLink()) + '" style="font-size:12.5px;background:#f7f9fb">' +
     '<div style="display:flex;gap:8px;margin-top:8px">' +
@@ -1470,7 +1473,9 @@ function genDemo() {
     } catch (e) { }
     setTimeout(() => toast('已写入云端配置，去「报告」输口令试试'), 400);
   }
-  PERIOD = normPeriod(qp.get('p')) || CFG.period || curPeriod();
+  const _up = normPeriod(qp.get('p'));
+  PERIOD = _up || CFG.period || curPeriod();
+  PERIOD_SRC = _up ? 'url' : (CFG.period ? 'cfg' : 'auto');
   RP = PERIOD;
   if (qp.get('demo') === '1' && doneCount() === 0) genDemo();
   if (!location.hash) location.hash = '#/fill';
